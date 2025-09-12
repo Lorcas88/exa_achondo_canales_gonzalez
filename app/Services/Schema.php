@@ -18,18 +18,33 @@ class SchemeService
             c.character_maximum_length,
             c.character_set_name,
             c.column_key,
+            CASE 
+                WHEN c.column_key = 'PRI' THEN 
+                    CASE 
+                        WHEN pk.pk_column_count = 1 THEN 'Simple PK'
+                        ELSE 'Composite PK'
+                    END
+                ELSE NULL
+            END AS PK_TYPE,
             c.extra,
             cu.position_in_unique_constraint,
             cu.referenced_table_name,
             cu.referenced_column_name
         FROM
             information_schema.columns c
-            LEFT JOIN
-            information_schema.key_column_usage cu
+            LEFT JOIN information_schema.key_column_usage cu
                 ON c.table_schema = cu.table_schema
                 AND c.table_name = cu.table_name
                 AND c.column_name = cu.column_name
                 AND cu.REFERENCED_TABLE_NAME IS NOT NULL
+            LEFT JOIN (
+                SELECT table_schema, table_name, COUNT(*) AS pk_column_count
+                FROM information_schema.columns
+                WHERE column_key = 'PRI'
+                GROUP BY table_schema, table_name
+            ) AS pk
+                ON c.table_schema = pk.table_schema
+                AND c.table_name = pk.table_name
         WHERE
             c.table_schema = ?
             AND c.table_name = ?
@@ -84,14 +99,24 @@ class SchemeService
     {
         $meta = $this->loadMeta($table); // metadata de la tabla
         $data = []; // aquí guardaremos los nombres de columnas obligatorias
+        $countPK = 0;
+
+        foreach ($meta as $c) {
+            $columnKey    = $c['COLUMN_KEY']    ?? null;
+            if ($columnKey === 'PRI') {
+                $countPK++;
+                continue;
+            }
+        }
 
         foreach ($meta as $c) {
             // Evitamos errores si alguna clave no existe
             $columnKey    = $c['COLUMN_KEY']    ?? null;
             $columnDefault= $c['COLUMN_DEFAULT']?? null;
-
+            $pKType       = $c['PK_TYPE']?? null;
+            
             // Reglas para definir si la columna es obligatoria
-            if ($columnKey !== 'PRI' && empty($columnDefault)) {
+            if ($columnKey !== 'PRI' && empty($columnDefault) || $pKType === 'Composite PK') {
                 $data[] = $c['COLUMN_NAME']; // guardamos solo el nombre
             }
         }
