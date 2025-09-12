@@ -36,8 +36,13 @@ abstract class Base {
                 $joinIndex++;
 
                 // Mostrar el campo legible con alias único
-                $columns[] = "$alias.nombre AS {$refTable}_nombre";
-                $columns[] = "t.$c";
+                if ($c === "cliente_id") {
+                    $columns[] = "$alias.nombre_comercial AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                } else {
+                    $columns[] = "$alias.nombre AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                }
 
                 // JOIN con alias distinto
                 $joins[]   = "LEFT JOIN $refTable $alias ON t.$c = $alias.$refColumn";
@@ -72,20 +77,6 @@ abstract class Base {
         $columns = [];
         $joins = [];
 
-        // foreach ($fillColumns as $c) {
-        //     if (isset($fKColumns[$c])) {
-        //         $refTable = $fKColumns[$c]['referenced_table'];
-        //         $refColumn = $fKColumns[$c]['referenced_column'];
-
-        //         // Alias para mostrar valor legible
-        //         $columns[] = "r.nombre AS $refTable";
-        //         $columns[] = "t.$c";
-        //         $joins[]   = "LEFT JOIN $refTable r ON t.$c = r.$refColumn";
-        //     } else {
-        //         $columns[] = "t.$c";
-        //     }
-        // }
-
         $joinIndex = 1; // contador de alias dinámicos
 
         foreach ($fillColumns as $c) {
@@ -98,8 +89,13 @@ abstract class Base {
                 $joinIndex++;
 
                 // Mostrar el campo legible con alias único
-                $columns[] = "$alias.nombre AS {$refTable}_nombre";
-                $columns[] = "t.$c";
+                if ($c === "cliente_id") {
+                    $columns[] = "$alias.nombre_comercial AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                } else {
+                    $columns[] = "$alias.nombre AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                }
 
                 // JOIN con alias distinto
                 $joins[]   = "LEFT JOIN $refTable $alias ON t.$c = $alias.$refColumn";
@@ -128,28 +124,6 @@ abstract class Base {
         
         $columns = [];
         $joins = [];
-
-        // foreach ($allColumns as $c) {
-        //     // Revisa si la columna es llave foránea
-        //     if (isset($fKColumns[$c])) {
-        //         $refTable = $fKColumns[$c]['referenced_table'];
-        //         $refColumn = $fKColumns[$c]['referenced_column'];
-
-        //         $columns[] = "r.nombre AS $refTable"; // Se da un alias para evitar conflictos
-        //         $columns[] = "t.$c";
-        //         $joins[]   = "LEFT JOIN $refTable r ON t.$c = r.$refColumn";
-        //     } else {
-        //         $columns[] = "t.$c";
-        //     }
-        // }
-        
-        // $columnsSql = implode(", ", $columns);
-        // $joinsSql   = implode(" ", $joins);
-
-        // $sql = "SELECT $columnsSql 
-        //         FROM {$this->table} t
-        //         $joinsSql
-        //         WHERE t.$whereParam = ?";
 
         $joinIndex = 1; // contador de alias dinámicos
 
