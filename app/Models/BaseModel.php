@@ -39,6 +39,12 @@ abstract class Base {
                 if ($c === "cliente_id") {
                     $columns[] = "$alias.nombre_comercial AS {$refTable}_nombre";
                     $columns[] = "t.$c";
+                } elseif ($c === "producto_id") {
+                    $columns[] = "$alias.titulo AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                } elseif ($c === "talla_id") {
+                    $columns[] = "$alias.talla AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
                 } else {
                     $columns[] = "$alias.nombre AS {$refTable}_nombre";
                     $columns[] = "t.$c";
@@ -92,6 +98,12 @@ abstract class Base {
                 if ($c === "cliente_id") {
                     $columns[] = "$alias.nombre_comercial AS {$refTable}_nombre";
                     $columns[] = "t.$c";
+                } elseif ($c === "producto_id") {
+                    $columns[] = "$alias.titulo AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                } elseif ($c === "talla_id") {
+                    $columns[] = "$alias.talla AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
                 } else {
                     $columns[] = "$alias.nombre AS {$refTable}_nombre";
                     $columns[] = "t.$c";
@@ -139,6 +151,12 @@ abstract class Base {
                 // Mostrar el campo legible con alias único
                 if ($c === "cliente_id") {
                     $columns[] = "$alias.nombre_comercial AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                } elseif ($c === "producto_id") {
+                    $columns[] = "$alias.titulo AS {$refTable}_nombre";
+                    $columns[] = "t.$c";
+                } elseif ($c === "talla_id") {
+                    $columns[] = "$alias.talla AS {$refTable}_nombre";
                     $columns[] = "t.$c";
                 } else {
                     $columns[] = "$alias.nombre AS {$refTable}_nombre";
