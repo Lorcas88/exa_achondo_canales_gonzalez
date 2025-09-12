@@ -94,10 +94,10 @@ foreach ($routes[$method] as $pattern => $handler) {
             'protected' => [
                 new AuthMiddleware($timeout),
                 new RoleMiddleware($controllerName, $action, $id),
-                new CsrfMiddleware([
-                    '#^' . PUBLIC_PREFIX . '/login/?$#',
-                    '#^' . PROTECTED_PREFIX . '/logout/?$#'
-                ])
+                // new CsrfMiddleware([
+                //     '#^' . PUBLIC_PREFIX . '/login/?$#',
+                //     '#^' . PROTECTED_PREFIX . '/logout/?$#'
+                // ])
             ],
             'public' => [] // Si la ruta es pública, los middleware no se ejecutarán
         ];

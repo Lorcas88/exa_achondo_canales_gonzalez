@@ -11,16 +11,35 @@ class ProductController extends BaseController {
     protected function validate($data, $isUpdate = false) {
         $errores = [];
         if (!$isUpdate) {
-            if (empty($data['nombre'])) $errores['nombre'] = 'El nombre es obligatorio.';
-            if (empty($data['precio'])) $errores['precio'] = 'El precio es obligatorio.';
-            if (empty($data['categoria_id'])) $errores['categoria_id'] = 'El categoria_id es obligatorio.';
+            $mandatoryFields = ['titulo', 'precio', 'sku'];
+
+            foreach ($mandatoryFields as $field) {
+                if (empty($data[$field])) $errores[$field] = 'El campo ' . $field . ' es obligatorio.';
+            }
         }
-        if (isset($data['nombre']) && strlen($data['nombre']) > 200) $errores['nombre'] = 'Máximo 150 caracteres.';
-        if (isset($data['descripcion']) && strlen($data['descripcion']) > 200) $errores['descripcion'] = 'Máximo 500 caracteres.';
-        if (isset($data['precio']) && !preg_match('/^\d+(\.\d{1,2})?$/', $data['precio'])) {
-            $errores['precio'] = 'El precio debe ser un número válido con hasta 2 decimales.';
+
+        $maxLengthFields = [
+            'titulo' => 200,
+            'club' => 150,
+            'pais' => 80,
+            'tipo' => 80,
+            'color' => 120,
+            'sku' => 80,
+        ];
+        foreach ($maxLengthFields as $field => $maxLength) {
+            if (isset($data[$field]) && strlen($data[$field]) > $maxLength) $errores[$field] = 'Máximo ' . $maxLength . ' caracteres.';
         }
-        
+
+        $decFields = [
+            'precio' => 2,
+            'precio_oferta' => 2,
+        ];
+        foreach ($decFields as $field => $dec) {
+            if (isset($data[$field]) && !is_numeric($data[$field])) $errores[$field] = 'El campo ' . $field . ' debe ser un número válido.';
+            if (isset($data[$field]) && $data[$field] < 0) $errores[$field] = 'El campo ' . $field . ' no puede ser negativo.';
+            if (isset($data[$field]) && !preg_match('/^\d+(\.\d{1,'.$dec.'})?$/', $data[$field])) $errores[$field] = 'El campo ' . $field . ' debe ser un número válido con hasta 2 decimales.';
+        }
+
         return $errores;
     }
 }
