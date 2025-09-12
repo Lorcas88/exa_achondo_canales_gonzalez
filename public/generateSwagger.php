@@ -55,7 +55,7 @@ function generateSwagger($routes, PDO $pdo) {
     $putExamples = [];
     // Mapeo controlador -> tabla
     $controllerToTable = [
-        'UserController' => 'usuarios',
+        'UserController' => 'usuario',
         'CategoryController' => 'categoria',
         'ProductController' => 'producto',
         'StockController' => 'stock',
