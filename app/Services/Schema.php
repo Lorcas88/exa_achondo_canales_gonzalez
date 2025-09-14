@@ -1,12 +1,26 @@
 <?php
-// app/Services/SchemeService.php
-
+/**
+ * Servicio para introspección de esquemas de bases de datos.
+ *
+ * Esta clase provee métodos para obtener metadatos de tablas y columnas,
+ * como por ejemplo, qué columnas son rellenables, actualizables, u obligatorias.
+ * Utiliza la `information_schema` de MySQL y cachea los resultados para mejorar el rendimiento.
+ */
 class SchemeService
 {
+    /**
+     * @var PDO Conexión a la base de datos.
+     */
     private $conn;
+
+    /**
+     * @var string Nombre de la base de datos.
+     */
     private $dbName;
 
-    /* ======================  Consulta a `information_schema`  ====================== */
+    /**
+     * @var string Consulta SQL para obtener metadatos de las columnas desde `information_schema`.
+     */
     private const COLUMN_QUERY = "
         SELECT 
             c.table_name,
@@ -25,7 +39,7 @@ class SchemeService
                         ELSE 'Composite PK'
                     END
                 ELSE NULL
-            END AS PK_TYPE,
+            END AS pk_type,
             c.extra,
             cu.position_in_unique_constraint,
             cu.referenced_table_name,
@@ -52,10 +66,16 @@ class SchemeService
             c.ordinal_position
     ";
 
-    /* ======================  Cache interno  ====================== */
-    private static $cache = [];   // ['usuarios' => [...meta array...]]
+    /**
+     * @var array Cache para almacenar los metadatos de las tablas y evitar consultas repetidas.
+     */
+    private static $cache = [];
 
-    /* ======================  Constructor  ====================== */
+    /**
+     * Constructor de SchemeService.
+     *
+     * @param PDO $pdo La conexión a la base de datos.
+     */
     public function __construct(PDO $pdo)
     {
         $this->conn   = $pdo;
@@ -63,11 +83,20 @@ class SchemeService
         $this->dbName = $config['DB_NAME'];
     }
 
-    /* ======================  Cargar meta y cachear  ====================== */
+    /**
+     * Carga los metadatos de una tabla.
+     *
+     * Si los metadatos ya están en caché, los devuelve. Si no, realiza la consulta
+     * a la base de datos y guarda el resultado en la caché antes de devolverlo.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Los metadatos de la tabla.
+     * @throws RuntimeException Si la tabla no se encuentra.
+     */
     private function loadMeta($table)
     {
         if (isset(self::$cache[$table])) {
-            return self::$cache[$table];  // ya está cacheado
+            return self::$cache[$table];
         }
 
         $stmt = $this->conn->prepare(self::COLUMN_QUERY);
@@ -82,98 +111,131 @@ class SchemeService
         return $meta;
     }
 
-    /* ======================  Métodos públicos  ====================== */
+    /**
+     * Obtiene todas las columnas de una tabla.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Una lista con los nombres de todas las columnas.
+     */
     public function allColumns($table)
     {
-        $meta = $this->loadMeta($table); // metadata de la tabla
-        $data = []; // aquí guardaremos los nombres de columnas obligatorias
+        $meta = $this->loadMeta($table);
+        $data = [];
 
         foreach ($meta as $c) {
-            $data[] = $c['COLUMN_NAME'];
+            $data[] = $c['column_name'];
         }
 
         return $data;
     }
 
+    /**
+     * Determina qué columnas de una tabla son "rellenables".
+     *
+     * Una columna es rellenable si no es una clave primaria simple o si es parte de una clave primaria compuesta.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Una lista de nombres de columnas rellenables.
+     */
     public function fillableColumns($table)
     {
-        $meta = $this->loadMeta($table); // metadata de la tabla
-        $data = []; // aquí guardaremos los nombres de columnas obligatorias
-        $countPK = 0;
-
+        $meta = $this->loadMeta($table);
+        $data = [];
+        
         foreach ($meta as $c) {
-            $columnKey    = $c['COLUMN_KEY']    ?? null;
-            if ($columnKey === 'PRI') {
-                $countPK++;
-                continue;
-            }
-        }
+            $columnKey    = $c['column_key'];
+            $columnDefault= $c['column_default'];
+            $pKType       = $c['pk_type'];
 
-        foreach ($meta as $c) {
-            // Evitamos errores si alguna clave no existe
-            $columnKey    = $c['COLUMN_KEY']    ?? null;
-            $columnDefault= $c['COLUMN_DEFAULT']?? null;
-            $pKType       = $c['PK_TYPE']?? null;
-            
-            // Reglas para definir si la columna es obligatoria
-            if ($columnKey !== 'PRI' && empty($columnDefault) || $pKType === 'Composite PK') {
-                $data[] = $c['COLUMN_NAME']; // guardamos solo el nombre
+            // Las columnas son rellenables si no son PK, o siéndolo, son parte de una PK compuesta.
+            if (($columnKey !== 'PRI' && 
+                (empty($columnDefault) || $columnDefault === "NULL")) || 
+                $pKType === 'Composite PK') {
+                
+                $data[] = $c['column_name'];
             }
         }
 
         return $data;
     }
 
+    /**
+     * Determina qué columnas son actualizables.
+     *
+     * Excluye claves primarias, columnas autoincrementables, timestamps automáticos, ENUMs y el campo 'rut'.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Una lista de nombres de columnas actualizables.
+     */
     public function updatableColumns($table)
     {
         $meta = $this->loadMeta($table);
         $data = [];
 
         foreach ($meta as $c) {
-            $columnKey   = ($c['COLUMN_KEY'] ?? $c['column_key'] ?? '') ?: '';
-            $extra       = ($c['EXTRA'] ?? $c['extra'] ?? '') ?: '';
-            $dataType    = strtoupper($c['DATA_TYPE'] ?? $c['data_type'] ?? '');
-        
-            // Excluir PK, auto_increment y campos de tipo ENUM
+            $columnKey   = $c['column_key'];
+            $columnDefault= $c['column_default'];
+            $extra       = $c['extra'];
+            $dataType    = $c['data_type'];
+
             if (strtoupper($columnKey) !== 'PRI' && 
                 stripos($extra, 'auto_increment') === false &&
-                $dataType !== 'ENUM') {
-                $data[] = $c['COLUMN_NAME'];
+                stripos($columnDefault, 'current_timestamp()') === false &&
+                $dataType !== 'ENUM' &&
+                stripos($c['column_name'], 'rut') === false) {
+                $data[] = $c['column_name'];
             }
         }
         
         return $data;
     }
 
+    /**
+     * Obtiene las columnas que son obligatorias.
+     *
+     * Una columna es obligatoria si no es clave primaria, no es autoincremental,
+     * no tiene un valor por defecto y no permite valores nulos.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Una lista de nombres de columnas obligatorias.
+     */
     public function mandatoryColumns($table)
     {
         $meta = $this->loadMeta($table);
         $data = [];
 
         foreach ($meta as $c) {
-            $columnKey = $c['COLUMN_KEY'] ?? null;
-            $extra = $c['EXTRA'] ?? null;
-            $columnDefault = $c['COLUMN_DEFAULT'] ?? null;
-            $isNullable = $c['IS_NULLABLE'] ?? null;
+            $columnKey = $c['column_key'];
+            $extra = $c['extra'];
+            $columnDefault = $c['column_default'];
+            $isNullable = $c['is_nullable'];
 
             if ($columnKey !== 'PRI' && $extra !== 'auto_increment'
-                && empty($columnDefault) && $isNullable === 'NO') {
-                $data[] = $c['COLUMN_NAME'];
+                && (empty($columnDefault) || $columnDefault === "NULL") 
+                && $isNullable === 'NO') {
+                $data[] = $c['column_name'];
             }
         }
         
         return $data;
     }
 
+    /**
+     * Obtiene las columnas que son claves foráneas.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Un array asociativo donde las claves son los nombres de las columnas FK
+     *               y los valores son información sobre la tabla y columna referenciada.
+     */
     public function foreignKeyColumns($table)
     {
         $meta = $this->loadMeta($table);
         $data = [];
 
         foreach ($meta as $c) {
-            $columnName    = $c['COLUMN_NAME'] ?? null;
-            $refTableName  = $c['REFERENCED_TABLE_NAME'] ?? null;
-            $refColumnName = $c['REFERENCED_COLUMN_NAME'] ?? 'id';
+            $columnName    = $c['column_name'];
+            $refTableName  = $c['referenced_table_name'];
+            $refColumnName = $c['referenced_column_name'];
 
             if ($columnName && !empty($refTableName) && $refTableName !== 'reserva') {
                 $data[$columnName] = [
@@ -186,6 +248,12 @@ class SchemeService
         return $data;
     }
 
+    /**
+     * Genera un esquema de la tabla compatible con la especificación Swagger/OpenAPI.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Un array que representa el esquema del objeto para Swagger.
+     */
     public function getSwaggerSchema($table) {
         $meta = $this->loadMeta($table);
 
@@ -193,16 +261,16 @@ class SchemeService
         $required = [];
 
         foreach ($meta as $col) {
-            $dataType   = $col['DATA_TYPE']    ?? ($col['data_type']    ?? null);
-            $columnName = $col['COLUMN_NAME']  ?? ($col['column_name']  ?? null);
-            $isNullable = $col['IS_NULLABLE']  ?? ($col['is_nullable']  ?? null);
-            $columnKey  = $col['COLUMN_KEY']   ?? ($col['column_key']   ?? null);
+            $dataType   = $col['data_type'];
+            $columnName = $col['column_name'];
+            $isNullable = $col['is_nullable'];
+            $columnKey  = $col['column_key'];
 
             if (!$columnName) {
-                // No podemos describir sin nombre de columna
                 continue;
             }
 
+            // Mapea tipos de datos de la DB a tipos de Swagger.
             $type = match($dataType) {
                 'int', 'bigint', 'smallint', 'mediumint' => 'integer',
                 'decimal', 'float', 'double' => 'number',
@@ -212,6 +280,7 @@ class SchemeService
                 default => 'string'
             };
 
+            // Genera un ejemplo basado en el tipo de dato.
             $example = match($type) {
                 'integer' => 1,
                 'number' => 100.5,
@@ -224,11 +293,10 @@ class SchemeService
                 "example" => $example
             ];
 
-            // Para ENUM, agregar valores permitidos
+            // Si es un ENUM, extrae y añade los posibles valores al esquema.
             if ($dataType === 'enum') {
-                // Extraer valores del COLUMN_TYPE (ej: "enum('pendiente','procesando','completado')")
                 $columnType = $col['COLUMN_TYPE'] ?? $col['column_type'] ?? '';
-                if (preg_match("/enum\\(([^)]+)\\)/", $columnType, $matches)) {
+                if (preg_match("/enum\(([^)]+)\)/", $columnType, $matches)) {
                     $enumValues = array_map(function($val) {
                         return trim($val, "'\"");
                     }, explode(',', $matches[1]));
@@ -239,6 +307,7 @@ class SchemeService
 
             $properties[$columnName] = $property;
 
+            // Si la columna no es nullable y no es PK, se añade a la lista de requeridos.
             if ($isNullable === 'NO' && $columnKey !== 'PRI') {
                 $required[] = $columnName;
             }
@@ -251,6 +320,12 @@ class SchemeService
         ];
     }
 
+    /**
+     * Obtiene las columnas de tipo ENUM y sus posibles valores.
+     *
+     * @param string $table El nombre de la tabla.
+     * @return array Un array asociativo con los nombres de las columnas ENUM y sus valores.
+     */
     public function getEnumColumns($table) {
         $meta = $this->loadMeta($table);
         $enumColumns = [];
@@ -261,7 +336,7 @@ class SchemeService
             
             if ($dataType === 'enum' && $columnName) {
                 $columnType = $col['COLUMN_TYPE'] ?? $col['column_type'] ?? '';
-                if (preg_match("/enum\\(([^)]+)\\)/", $columnType, $matches)) {
+                if (preg_match("/enum\(([^)]+)\)/", $columnType, $matches)) {
                     $enumValues = array_map(function($val) {
                         return trim($val, "'\"");
                     }, explode(',', $matches[1]));

@@ -7,7 +7,7 @@ function generateSwagger($routes, PDO $pdo) {
             "version" => "1.0.0",
             "description" => "Documentación generada automáticamente desde el router para Examen - IPSS.\n\nEsquemas inferidos dinámicamente desde la base de datos.\n\nNOTA: Existen rutas protegidas bajo el prefijo /api que requieren autenticación de sesión. Primero use /auth/register o /auth/login para obtener acceso; luego pruebe los endpoints protegidos."
         ],
-        "servers" => [["url" => "http://localhost:8000"]],
+        "servers" => [["url" => "http://localhost/todocamisetas_server/"]],
         "paths" => [],
         "tags" => [],
         "components" => ["schemas" => []]
@@ -25,6 +25,7 @@ function generateSwagger($routes, PDO $pdo) {
         $url = preg_replace('/\\^|\\$/', '', $url);   // quita ^ o $ sueltos si quedaran
         return $url;
     }
+
     function generateParameters($url) {
         $params = [];
         if (strpos($url, '{id}') !== false) {
@@ -56,22 +57,17 @@ function generateSwagger($routes, PDO $pdo) {
     // Mapeo controlador -> tabla
     $controllerToTable = [
         'UserController' => 'usuario',
-        'CategoryController' => 'categoria',
         'ProductController' => 'producto',
-        'StockController' => 'stock',
-        'HoldController' => 'reserva',
-        'ShipmentController' => 'envio',
+        'StockController' => 'producto_talla_stock',
+        'ClientController' => 'cliente',
     ];
-
+    
     $tagSet = [];
     $tagDescriptions = [
         'AuthController' => 'Autenticación: registro, inicio y cierre de sesión. Endpoints públicos en /auth, protegidos en /api.',
-        'UserController' => 'Gestión de usuarios. La mayoría de endpoints son modificables solo por el administrador (rol_id=1).',
-        'CategoryController' => 'Gestión de categorías de productos. PUT y POST son solo para el administrador (rol_id=1).',
+        'UserController' => 'Gestión de usuarios. La mayoría de endpoints son modificables solo por el administrador (rol_id=1) con excepción de register, el cual es de acceso público.',
         'ProductController' => 'Gestión de productos del catálogo. PUT y POST son solo para el administrador (rol_id=1).',
         'StockController' => 'Gestión de stock e inventario. PUT y POST son solo para el administrador (rol_id=1).',
-        'HoldController' => 'Reservas de productos. POST son solo para el cliente (rol_id=3).',
-        'ShipmentController' => 'Envíos asociados a reservas. PUT y POST son solo para el administrador (rol_id=1).'
     ];
     
     // Detectar columnas ENUM para excluir de PUT
@@ -94,7 +90,7 @@ function generateSwagger($routes, PDO $pdo) {
             $entity = null;
             if (isset($controllerToTable[$controller])) {
                 $table = $controllerToTable[$controller];
-                $entity = ucfirst($table);
+                $entity = $table;
                 if (!isset($entitySchemas[$entity])) {
                     try {
                         $schema = $schemaService->getSwaggerSchema($table);
@@ -136,6 +132,20 @@ function generateSwagger($routes, PDO $pdo) {
                             
                             $postExamples[$entity] = $postEx;
                             $putExamples[$entity] = $putEx;
+
+                            // Casos especiales para ejemplos
+                            if ($entity === 'cliente' && isset($postExamples[$entity]['rut'])) {
+                                $postExamples[$entity]['rut'] = '99999999-9';
+                            }
+                            if ($entity === 'cliente' && isset($postExamples[$entity]['contacto_email'])) {
+                                $postExamples[$entity]['contacto_email'] = 'test@dominio.cl';
+                            }
+                            if ($entity === 'usuario' && isset($postExamples[$entity]['email'])) {
+                                $postExamples[$entity]['email'] = 'test@dominio.cl';
+                            }
+                            if ($entity === 'usuario' && isset($postExamples[$entity]['fecha_nacimiento'])) {
+                                $postExamples[$entity]['fecha_nacimiento'] = '2000-10-01';
+                            }
                         } catch (Throwable $e) {
                             // si falla, se mantiene ejemplo completo
                         }
@@ -149,21 +159,14 @@ function generateSwagger($routes, PDO $pdo) {
             $requestBody = null;
             if (in_array($method, ['POST','PUT','PATCH'])) {
                 $isAuthLogin = ($controller === 'AuthController' && $action === 'login');
-                $isEnumPatch = ($method === 'PATCH' && in_array($action, ['updateEstado']));
+                $isUnsiscribe = ($controller === 'UserController' && $action === 'unsubscribe');
+                // $isEnumPatch = ($method === 'PATCH' && in_array($action, ['updateEstado']));
                 
                 if ($isAuthLogin) {
                     $requestBody = [
                         "required" => true,
                         "content" => [
                             "application/json" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "email" => ["type" => "string", "format" => "email"],
-                                        "contrasena" => ["type" => "string", "format" => "password"]
-                                    ],
-                                    "required" => ["email", "contrasena"]
-                                ],
                                 "examples" => [
                                     "admin" => [
                                         "summary" => "Administrador (rol_id=1)",
@@ -181,38 +184,23 @@ function generateSwagger($routes, PDO $pdo) {
                             ]
                         ]
                     ];
-                } elseif ($isEnumPatch) {
-                    // PATCH especial para columnas ENUM
+                } elseif ($isUnsiscribe) {
                     $table = $controllerToTable[$controller] ?? '';
                     $enumCols = $enumColumns[$table] ?? [];
-                    $estadoValues = $enumCols['estado'] ?? ['pendiente', 'procesando', 'completado'];
                     
                     $requestBody = [
                         "required" => true,
                         "content" => [
                             "application/json" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "estado" => [
-                                            "type" => "string",
-                                            "enum" => $estadoValues,
-                                            "example" => $estadoValues[0]
-                                        ]
-                                    ],
-                                    "required" => ["estado"]
-                                ],
-                                "example" => ["estado" => $estadoValues[0]]
+                                "example" => []
                             ]
                         ]
                     ];
                 } else {
-                    $schemaRef = $entity ? ['$ref' => "#/components/schemas/{$entity}"] : ["type" => "object"];
                     $requestBody = [
                         "required" => true,
                         "content" => [
                             "application/json" => [
-                                "schema" => $schemaRef,
                                 "example" => ($entity && $method === 'POST' && isset($postExamples[$entity]))
                                     ? $postExamples[$entity]
                                     : (($entity && in_array($method, ['PUT','PATCH']) && isset($putExamples[$entity]))
@@ -224,6 +212,34 @@ function generateSwagger($routes, PDO $pdo) {
                 }
             }
 
+            $commonHeaders = [
+                "X-RateLimit-Limit" => [
+                    "schema" => ["type" => "integer"],
+                    "description" => "Límite de peticiones por hora",
+                    "example" => 100
+                ],
+                "X-RateLimit-Remaining" => [
+                    "schema" => ["type" => "integer"],
+                    "description" => "Número de peticiones restantes en la hora actual",
+                    "example" => 95
+                ],
+                "X-RateLimit-Reset" => [
+                    "schema" => ["type" => "integer"],
+                    "description" => "Timestamp Unix en el que el límite de peticiones se reiniciará",
+                    "example" => 1653571200
+                ],
+                "Cache-Control" => [
+                    "schema" => ["type" => "string"],
+                    "description" => "Directivas de control de caché",
+                    "example" => "public, max-age=3600"
+                ],
+                "ETag" => [
+                    "schema" => ["type" => "string"],
+                    "description" => "Etiqueta de entidad para la validación de caché",
+                    "example" => 'W/"abcdef12345"'
+                ]
+            ];
+
             // Operación básica
             $operation = [
                 "tags" => [$controller],
@@ -234,98 +250,11 @@ function generateSwagger($routes, PDO $pdo) {
                     "200" => ($controller === 'AuthController' && $action === 'login')
                         ? [
                             "description" => "Operación exitosa",
-                            "headers" => [
-                                "X-RateLimit-Limit" => [
-                                    "schema" => ["type" => "integer"],
-                                    "description" => "Límite de peticiones por hora",
-                                    "example" => 100
-                                ],
-                                "X-RateLimit-Remaining" => [
-                                    "schema" => ["type" => "integer"],
-                                    "description" => "Número de peticiones restantes en la hora actual",
-                                    "example" => 95
-                                ],
-                                "X-RateLimit-Reset" => [
-                                    "schema" => ["type" => "integer"],
-                                    "description" => "Timestamp Unix en el que el límite de peticiones se reiniciará",
-                                    "example" => 1653571200
-                                ],
-                                "Cache-Control" => [
-                                    "schema" => ["type" => "string"],
-                                    "description" => "Directivas de control de caché",
-                                    "example" => "no-store, no-cache, must-revalidate"
-                                ],
-                                "ETag" => [
-                                    "schema" => ["type" => "string"],
-                                    "description" => "Etiqueta de entidad para la validación de caché",
-                                    "example" => "W/\"abcdef12345\""
-                                ]
-                            ],
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "success" => ["type" => "boolean"],
-                                            "data" => [
-                                                "type" => "object",
-                                                "properties" => [
-                                                    "usuario" => ["type" => "object"],
-                                                    "session_id" => ["type" => "string"]
-                                                ]
-                                            ],
-                                            "message" => ["type" => "string"]
-                                        ]
-                                    ],
-                                    "example" => [
-                                        "success" => true,
-                                        "data" => [
-                                            "usuario" => [
-                                                "nombre" => "Juan",
-                                                "apellido" => "Testardo",
-                                                "email" => "juan@example.com",
-                                                "fecha_nacimiento" => "1800-08-21",
-                                                "telefono" => "+56911111111",
-                                                "direccion" => "Calle Falsa 1, Santiago",
-                                                "rol" => "Admin",
-                                                "fecha_registro" => "2025-09-07 03:57:05"
-                                            ],
-                                            "session_id" => "abcd1234efgh5678"
-                                        ],
-                                        "message" => "Inicio de sesión exitoso"
-                                    ]
-                                ]
-                            ]
+                            "headers" => $commonHeaders,
                         ]
                         : [
                             "description" => "Operación exitosa",
-                            "headers" => [
-                                "X-RateLimit-Limit" => [
-                                    "schema" => ["type" => "integer"],
-                                    "description" => "Límite de peticiones por hora",
-                                    "example" => 100
-                                ],
-                                "X-RateLimit-Remaining" => [
-                                    "schema" => ["type" => "integer"],
-                                    "description" => "Número de peticiones restantes en la hora actual",
-                                    "example" => 95
-                                ],
-                                "X-RateLimit-Reset" => [
-                                    "schema" => ["type" => "integer"],
-                                    "description" => "Timestamp Unix en el que el límite de peticiones se reiniciará",
-                                    "example" => 1653571200
-                                ],
-                                "Cache-Control" => [
-                                    "schema" => ["type" => "string"],
-                                    "description" => "Directivas de control de caché",
-                                    "example" => "public, max-age=3600"
-                                ],
-                                "ETag" => [
-                                    "schema" => ["type" => "string"],
-                                    "description" => "Etiqueta de entidad para la validación de caché",
-                                    "example" => "W/\"abcdef12345\""
-                                ]
-                            ]
+                            "headers" => $commonHeaders,
                         ],
                     "201" => ["description" => "Creado"],
                     "204" => ["description" => "Sin contenido"],
@@ -339,17 +268,17 @@ function generateSwagger($routes, PDO $pdo) {
                 ]
             ];
 
-            // GET listado => array de entidad
-            if ($method === 'GET') {
-                if (strpos($path, '{id}') === false) {
-                    if ($entity) {
-                        $operation['responses']['200']['content']['application/json']['schema'] = [
-                            "type" => "array",
-                            "items" => ['$ref' => "#/components/schemas/{$entity}"]
-                        ];
-                    }
-                }
-            }
+            // // GET listado => array de entidad
+            // if ($method === 'GET') {
+            //     if (strpos($path, '{id}') === false) {
+            //         if ($entity) {
+            //             $operation['responses']['200']['content']['application/json']['schema'] = [
+            //                 "type" => "array",
+            //                 "items" => ['$ref' => "#/components/schemas/{$entity}"]
+            //             ];
+            //         }
+            //     }
+            // }
 
             $swagger['paths'][$path][strtolower($method)] = $operation;
         }

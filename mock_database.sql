@@ -1,3 +1,5 @@
+DROP DATABASE IF EXISTS todo_camisetas_db;
+
 -- ============================
 -- CREAR BASE DE DATOS
 -- ============================
@@ -22,7 +24,7 @@ INSERT INTO rol (nombre) VALUES ('Admin'), ('Editor'), ('Cliente');
 CREATE TABLE cliente (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre_comercial VARCHAR(150) NOT NULL UNIQUE,
-  rut VARCHAR(30) NULL,
+  rut VARCHAR(30) NULL UNIQUE,
   direccion VARCHAR(255) NULL,
   categoria ENUM('Regular','Preferencial') NOT NULL DEFAULT 'Regular',
   contacto_nombre VARCHAR(120) NULL,
@@ -49,8 +51,7 @@ CREATE TABLE usuario (
     activo BOOLEAN DEFAULT TRUE,
     FOREIGN KEY (rol_id) REFERENCES rol(id),
     FOREIGN KEY (cliente_id) REFERENCES cliente(id)
-      ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT chk_usr_activo CHECK (activo IN (0,1))
+      ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- ============================
@@ -63,8 +64,8 @@ CREATE TABLE producto (
   pais VARCHAR(80) NULL,
   tipo VARCHAR(80) NULL, -- ej: Local, Visita, 3era, etc.
   color VARCHAR(120) NULL,
-  precio DECIMAL(12,0) NOT NULL,        
-  precio_oferta DECIMAL(12,0) DEFAULT NULL,
+  precio INT NOT NULL,
+  precio_oferta INT NULL,
   detalles TEXT NULL,
   sku VARCHAR(80) NOT NULL UNIQUE,
   creado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -96,9 +97,9 @@ CREATE TABLE producto_talla_stock (
 -- Clientes
 INSERT INTO cliente (nombre_comercial, rut, direccion, categoria, contacto_nombre, contacto_email, porcentaje_descuento)
 VALUES
-('90minutos','76.543.210-9','Providencia, Santiago','Preferencial','María Pérez','compras@90minutos.cl', 0.00),
+('90minutos','76.543.210-9','Providencia, Santiago','Preferencial','María Pérez','compras@90minutos.cl', 5.00),
 ('tdeportes','76.111.222-3','Ñuñoa, Santiago','Regular','Jorge Díaz','jorge@tdeportes.cl', 0.00),
-('MayoristaSport','76.999.888-1','Estación Central, Santiago','Preferencial','Lucía Gómez','ventas@mayoristasport.cl', 5.00);
+('MayoristaSport','76.999.888-1','Estación Central, Santiago','Preferencial','Lucía Gómez','ventas@mayoristasport.cl', 0.00);
 
 -- Usuarios
 INSERT INTO usuario (nombre, apellido, email, contrasena, fecha_nacimiento, telefono, direccion, rol_id, cliente_id)
@@ -109,14 +110,14 @@ VALUES
 ('María', 'López', 'maria@example.com', '$2y$12$Vu7Zg8PlsZY2HeAaQpXQ5O70olRBViMCjU1910uJ.HegeAqj7jbV6', '2000-02-15', '+56933334444', 'Calle Sol 321, Santiago', 3, 2); -- Cliente de tdeportes
 
 -- Talllas comunes
-INSERT IGNORE INTO talla (talla) VALUES ('S'),('M'),('L'),('XL'),('XXL');
+INSERT INTO talla (talla) VALUES ('S'),('M'),('L'),('XL'),('XXL');
 
 -- Productos
 INSERT INTO producto (titulo, club, pais, tipo, color, precio, precio_oferta, detalles, sku)
 VALUES
-('Camiseta Local 2025 - Selección Chilena', 'Selección Chilena', 'Chile', 'Local', 'Rojo y Azul', 45000, 40000, 'Edición aniversario 2025', 'SCL2025L'),
-('Camiseta Visita 2025 - Selección Chilena', 'Selección Chilena', 'Chile', 'Visita', 'Blanco con detalles azules', 45000, NULL, 'Versión visitante', 'SCL2025V'),
-('Camiseta ClubX 3era 2024', 'Club X', 'España', '3era Camiseta', 'Negro y Blanco', 35000, 30000, 'Modelo 3ra temporada', 'CLUBX300');
+('Camiseta Local 2025 - Selección Chilena', 'Selección Chilena', 'Chile', 'Local', 'Rojo y Azul', 45000, 42000, 'Edición aniversario 2025', 'SCL2025L'),
+('Camiseta Visita 2025 - Selección Chilena', 'Selección Chilena', 'Chile', 'Visita', 'Blanco con detalles azules', 40000, NULL, 'Versión visitante', 'SCL2025V'),
+('Camiseta ClubX 3era 2024', 'Club X', 'España', '3era Camiseta', 'Negro y Blanco', 35000, NULL, 'Modelo 3ra temporada', 'CLUBX300');
 
 -- Stock
 INSERT INTO producto_talla_stock (producto_id, talla_id, stock)

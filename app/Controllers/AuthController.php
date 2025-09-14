@@ -1,109 +1,140 @@
 <?php
-// require_once __DIR__ . '/BaseController.php';
-// require_once __DIR__ . '/../models/UserModel.php';
-// require_once __DIR__ . '/../views/jsonResponse.php';
-
-// // Iniciar sesión PHP en cada request
-// if (session_status() === PHP_SESSION_NONE) {
-//     session_start();
-// }
-
+/**
+ * Controlador de Autenticación
+ *
+ * Esta clase maneja toda la lógica relacionada con la autenticación de usuarios,
+ * incluyendo el inicio de sesión (login), el cierre de sesión (logout) y la
+ * obtención de los datos del usuario actualmente autenticado (me).
+ */
 class AuthController extends BaseController {
-    protected $hiddenFields = ['contrasena'];
+    /**
+     * @var array Campos que se ocultarán en las respuestas JSON.
+     */
+    protected $hiddenFields = ['contrasena', 'fecha_registro'];
     
+    /**
+     * Constructor del AuthController.
+     *
+     * @param PDO $conn La conexión a la base de datos.
+     */
     public function __construct($conn) {
+        // Utiliza el modelo User para buscar y verificar las credenciales de los usuarios.
         $model = new User($conn);
         parent::__construct($model);
     }
 
-    // protected para que el padre lo pueda usar
+    /**
+     * Valida los datos de entrada.
+     * Nota: Este método parece no ser utilizado directamente por las funciones de este controlador,
+     * pero está aquí por si se quisiera extender la funcionalidad.
+     *
+     * @param array $data Los datos a validar.
+     * @param bool $isUpdate Flag para diferenciar creación de actualización.
+     * @return array Un array de errores.
+     */
     protected function validate($data, $isUpdate = false) {
-        $errores = [];
+        $errors = [];
         if (!$isUpdate) {
-            if (empty($data['nombre'])) $errores['nombre'] = 'El nombre es obligatorio.';
-            if (empty($data['contrasena'])) $errores['contrasena'] = 'La contraseña es obligatoria.';
-            // if (empty($data['rol_id'])) $errores['rol_id'] = 'El rol es obligatorio.';
+            if (empty($data['nombre'])) $errors['nombre'] = 'El nombre es obligatorio.';
+            if (empty($data['contrasena'])) $errors['contrasena'] = 'La contraseña es obligatoria.';
         }
         if (isset($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            $errores['email'] = 'Email inválido.';
+            $errors['email'] = 'Email inválido.';
         }
-        // Agregar que si el rol del usuario con sesión iniciada, no es admin, no pueda cambiar rol
         if (isset($data['rol_id'])) {
             $validos = [1, 2, 3];
             if (!in_array($data['rol_id'], $validos)) {
-                $errores['rol_id'] = 'Rol inválido.';
+                $errors['rol_id'] = 'Rol inválido.';
             }
         }
         if (isset($data['activo'])) {
             $validos = [0,1];
             if (!in_array($data['activo'], $validos)) {
-                $errores['activo'] = 'Estado inválido.';
+                $errors['activo'] = 'Estado inválido.';
             }
         }
-        return $errores;
+        return $errors;
     }
 
-    // Login: email y contraseña, retorna rol si es correcto
+    /**
+     * Maneja el inicio de sesión de un usuario.
+     *
+     * Verifica las credenciales (email y contraseña) y, si son correctas,
+     * crea una sesión para el usuario.
+     */
     public function login() 
     {
+        // 1. Lee y decodifica los datos JSON del cuerpo de la petición.
         $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input) jsonResponse(['error' => 'JSON inválido'], 400, false);
+        if (!$input) {
+            jsonResponse(['error' => 'JSON inválido'], 400, false);
+            return;
+        }
 
-        // Requerir email y contraseña
+        // 2. Valida que se hayan enviado el email y la contraseña.
         if (empty($input['email']) || empty($input['contrasena'])) {
             jsonResponse(['error' => 'Email y contraseña son obligatorios'], 422, false);
-        }
-
-        // Si ya hay sesión activa para este email
-        if (isset($_SESSION['usuario']) && $input['email'] === $_SESSION['usuario']['email']) {
-            jsonResponse(['data' => null, 'message' => 'La sesión ya está abierta'], 200);
+            return;
         }
         
-        // Buscar usuario por email
-        $usuario = $this->model->findBy('email', $input['email']);
-        if (!$usuario || !password_verify($input['contrasena'], $usuario['contrasena'])) {
-        // if (!$usuario || !($input['contrasena'] === $usuario['contrasena'])) {
-            jsonResponse(['error' => 'Credenciales incorrectas'], 401, false);
+        // 3. Busca al usuario en la base de datos por su email.
+        $user = $this->model->findBy('email', $input['email']);
+
+        // 4. Verifica si el usuario existe y si la contraseña es correcta.
+        // Se usa `password_verify` para comparar la contraseña enviada con el hash guardado.
+        if (!$user || !password_verify($input['contrasena'], $user['contrasena'])) {
+            jsonResponse(['error' => 'Credenciales incorrectas'], 401, false); // 401 Unauthorized
+            return;
         }
 
-        if ($usuario['activo'] != 1) {
-            jsonResponse(['error' => 'Usuario inactivo, contacte al administrador'], 403, false);
+        // 5. Verifica si la cuenta de usuario está activa.
+        if ($user['activo'] != 1) {
+            jsonResponse(['error' => 'Usuario inactivo, contacte al administrador'], 403, false); // 403 Forbidden
+            return;
         }
 
-        // Regenerar ID de sesión para seguridad
+        // 6. Regenera el ID de la sesión para prevenir ataques de fijación de sesión.
         session_regenerate_id(true);
 
-        // Filtrar campos ocultos
+        // 7. Oculta campos sensibles del array de usuario antes de guardarlo en la sesión.
         foreach ($this->hiddenFields as $field) {
-            unset($usuario[$field]);
+            unset($user[$field]);
         }
 
-        // Guardar usuario en sesión
-        $_SESSION['usuario'] = $usuario;
-        $_SESSION['usuario']['last_activity'] = time();
+        // 8. Guarda la información del usuario en la variable superglobal $_SESSION.
+        $_SESSION['usuario'] = $user;
+        $_SESSION['usuario']['last_activity'] = time(); // Guarda la hora de la última actividad.
 
-        // session_create_id();
-        unset($usuario["rol_id"], $usuario['activo'], $usuario['id']); // No enviar ciertos datos a la respuesta
-        jsonResponse(['data' => $usuario, 'message' => 'Login exitoso'], 200);
+        // 9. Prepara la respuesta JSON, eliminando datos sensibles adicionales.
+        unset($user["rol_id"], $user['activo'], $user['id']);
+        jsonResponse(['data' => $user, 'message' => 'Login exitoso'], 200);
     }
 
-    // Devuelve los datos del usuario autenticado
+    /**
+     * Devuelve los datos del usuario actualmente autenticado.
+     * Corresponde a la ruta GET /private/me
+     */
     public function me() {
-        // error_log(session_id());
-        // error_log(session_status());
+        // Verifica si existe información de usuario en la sesión.
         if (!isset($_SESSION['usuario'])) {
             jsonResponse(['error' => 'No autenticado'], 401, false);
+            return;
         }
 
+        // Prepara y envía los datos del usuario de la sesión.
         $response = $_SESSION['usuario'];
-        unset($response["rol_id"], $response['activo'], $response['id']); // No enviar ciertos datos a la respuesta
+        unset($response["rol_id"], $response['activo'], $response['id']);
         jsonResponse(['data' => $response], 200);
     }
 
-    // Logout simulado (no hay sesión real, solo respuesta estándar)
+    /**
+     * Cierra la sesión del usuario.
+     */
     public function logout() {
         if (isset($_SESSION['usuario'])) {
-            unset($_SESSION['usuario']);
+            // Limpia todas las variables de sesión.
+            session_unset();
+            // Destruye la sesión actual.
             session_destroy();
             jsonResponse(['message' => 'Cierre de sesión exitoso'], 200);
         } else {

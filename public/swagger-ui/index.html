@@ -37,22 +37,9 @@
     <div id="swagger-ui"></div>
     <script src="./swagger-ui-bundle.js"></script>
     <script src="./swagger-ui-standalone-preset.js"></script>
-    <!-- <script>
-      window.onload = function () {
-        const ui = SwaggerUIBundle({
-          url: "../swagger.json", // Ajusta la ruta a tu archivo swagger.json
-          dom_id: "#swagger-ui",
-          deepLinking: true,
-          presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-          plugins: [SwaggerUIBundle.plugins.Download],
-          layout: "StandaloneLayout",
-        });
-        window.ui = ui;
-      };
-    </script> -->
     <script>
       const ui = SwaggerUIBundle({
-        url: "/api-docs.json", // <--- Aquí le dices dónde está tu swagger.json
+        url: "/todocamisetas_server/api-docs.json", // <--- Aquí le dices dónde está tu swagger.json
         dom_id: "#swagger-ui",
         deepLinking: true,
         presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
