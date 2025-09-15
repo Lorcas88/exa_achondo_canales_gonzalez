@@ -281,10 +281,13 @@ class SchemeService
             };
 
             // Genera un ejemplo basado en el tipo de dato.
-            $example = match($type) {
-                'integer' => 1,
-                'number' => 100.5,
-                'boolean' => true,
+            $example = match(true) {
+                $type === 'integer' => 1,
+                $type === 'number' => 12.5,
+                $type === 'boolean' => true,
+                $dataType === 'date' => '2024-01-01',
+                $dataType === 'datetime' => '2024-01-01 12:00:00',
+                $dataType === 'timestamp' => '2024-01-01 12:00:00',
                 default => $columnName . "-ejemplo"
             };
 

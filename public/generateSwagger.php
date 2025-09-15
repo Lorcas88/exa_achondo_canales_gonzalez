@@ -58,8 +58,9 @@ function generateSwagger($routes, PDO $pdo) {
     $controllerToTable = [
         'UserController' => 'usuario',
         'ProductController' => 'producto',
-        'StockController' => 'producto_talla_stock',
         'ClientController' => 'cliente',
+        'SizeController' => 'talla',
+        'StockController' => 'producto_talla_stock',
     ];
     
     $tagSet = [];
@@ -85,6 +86,28 @@ function generateSwagger($routes, PDO $pdo) {
             [$controller, $action] = $handler;
             $path = regexToSwaggerPath($pattern);
             $tagSet[$controller] = true;
+
+            $parameters = generateParameters($path);
+
+            if ($controller === 'StockController' && in_array($action, ['show', 'put', 'destroy'])) {
+                $path = '/private/producto/{producto_id}/stock/{talla_id}';
+                $parameters = [
+                    [
+                        "name" => "producto_id",
+                        "in" => "path",
+                        "required" => true,
+                        "schema" => ["type" => "integer"],
+                        "description" => "ID del producto"
+                    ],
+                    [
+                        "name" => "talla_id",
+                        "in" => "path",
+                        "required" => true,
+                        "schema" => ["type" => "integer"],
+                        "description" => "ID de la talla"
+                    ]
+                ];
+            }
 
             // Resolver entidad y construir schema dinámico si aplica
             $entity = null;
@@ -113,7 +136,7 @@ function generateSwagger($routes, PDO $pdo) {
                             $fillable = $schemaService->fillableColumns($table);
                             $updatable = $schemaService->updatableColumns($table);
                             $enumCols = $enumColumns[$table] ?? [];
-                            
+
                             // POST: solo columnas fillable
                             $postEx = [];
                             foreach ($fillable as $colName) {
@@ -126,12 +149,22 @@ function generateSwagger($routes, PDO $pdo) {
                             $putEx = [];
                             foreach ($updatable as $colName) {
                                 if (!array_key_exists($colName, $enumCols) && array_key_exists($colName, $example)) {
-                                    $putEx[$colName] = $example[$colName];
+                                    $value = $example[$colName];
+                                    if (is_string($value) && substr($value, -8) === '-ejemplo') {
+                                        $putEx[$colName] = substr($value, 0, -8) . '-mod';
+                                    } else {
+                                        $putEx[$colName] = $value;
+                                    }
                                 }
                             }
                             
                             $postExamples[$entity] = $postEx;
                             $putExamples[$entity] = $putEx;
+
+                            if ($entity === 'producto_talla_stock') {
+                                unset($postExamples[$entity]['producto_id']);
+                                unset($putExamples[$entity]['producto_id']);
+                            }
 
                             // Casos especiales para ejemplos
                             if ($entity === 'cliente' && isset($postExamples[$entity]['rut'])) {
@@ -143,9 +176,26 @@ function generateSwagger($routes, PDO $pdo) {
                             if ($entity === 'usuario' && isset($postExamples[$entity]['email'])) {
                                 $postExamples[$entity]['email'] = 'test@dominio.cl';
                             }
-                            if ($entity === 'usuario' && isset($postExamples[$entity]['fecha_nacimiento'])) {
-                                $postExamples[$entity]['fecha_nacimiento'] = '2000-10-01';
+                            // if ($entity === 'usuario' && isset($postExamples[$entity]['fecha_nacimiento'])) {
+                            //     $postExamples[$entity]['fecha_nacimiento'] = '2000-10-01';
+                            // }
+
+                            // Aplicar los mismos casos especiales para PUT
+                            if ($entity === 'cliente' && isset($putExamples[$entity]['rut'])) {
+                                $putExamples[$entity]['rut'] = '99999999-9';
                             }
+                            if ($entity === 'cliente' && isset($putExamples[$entity]['contacto_email'])) {
+                                $putExamples[$entity]['contacto_email'] = 'test@dominio.cl';
+                            }
+                            if ($entity === 'cliente' && isset($putExamples[$entity]['categoria'])) {
+                                $putExamples[$entity]['categoria'] = 'Preferencial';
+                            }
+                            if ($entity === 'usuario' && isset($putExamples[$entity]['email'])) {
+                                $putExamples[$entity]['email'] = 'test@dominio.cl';
+                            }
+                            // if ($entity === 'usuario' && isset($putExamples[$entity]['fecha_nacimiento'])) {
+                            //     $putExamples[$entity]['fecha_nacimiento'] = '2000-10-01';
+                            // }
                         } catch (Throwable $e) {
                             // si falla, se mantiene ejemplo completo
                         }
@@ -244,7 +294,7 @@ function generateSwagger($routes, PDO $pdo) {
             $operation = [
                 "tags" => [$controller],
                 "summary" => "$action en $controller",
-                "parameters" => generateParameters($path),
+                "parameters" => $parameters,
                 "requestBody" => $requestBody,
                 "responses" => [
                     "200" => ($controller === 'AuthController' && $action === 'login')

@@ -79,7 +79,7 @@ $extraRoutes = [
         '#^' . PROTECTED_PREFIX . '/me/?$#' => ['AuthController', 'me'],
         '#^' . PROTECTED_PREFIX . '/producto/([0-9]+)/stock/?$#' => ['StockController', 'index'],
         '#^' . PROTECTED_PREFIX . '/producto/([0-9]+)/stock/([0-9]+)/?$#' => ['StockController', 'show'],
-        '#^' . PROTECTED_PREFIX . '/cliente/([0-9]+)/descuentos/?$#' => ['StockController', 'getDiscountClients'],
+        '#^' . PROTECTED_PREFIX . '/cliente/descuentos/?$#' => ['ClientController', 'discountClients'],
     ],
     'PATCH' => [
         '#^' . PROTECTED_PREFIX . '/usuario/me/unsubscribe/?$#' => ['UserController', 'unsubscribe'],

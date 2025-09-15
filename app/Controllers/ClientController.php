@@ -73,10 +73,18 @@ class ClientController extends BaseController {
         }
         
         // --- Validación de Categoría (Comentado) ---
-        // if (isset($data['categoria']) && !in_array($data['categoria'], ['Regular', 'Preferencial'])) {
-        //     $errors['categoria'] = 'La categoría debe ser "Regular" o "Preferencial".';
-        // }
+        if (isset($data['categoria']) && !in_array($data['categoria'], ['Regular', 'Preferencial'])) {
+            $errors['categoria'] = 'La categoría debe ser "Regular" o "Preferencial".';
+        }
 
         return $errors;
+    }
+
+    /**
+     * Obtiene todos los clientes que tienen un descuento.
+     */
+    public function discountClients() {
+        $clients = $this->model->findAllWithDiscount();
+        jsonResponse(['data' => $clients], 200);
     }
 }

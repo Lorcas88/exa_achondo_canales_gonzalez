@@ -19,8 +19,14 @@ class Client extends Base {
      *
      * @param PDO $conn La conexión a la base de datos.
      */
-    public function __construct($conn) {
-        // Llama al constructor del padre (Base) para configurar la conexión.
-        parent::__construct($conn);
+    /**
+     * Obtiene todos los clientes que tienen un descuento aplicado.
+     *
+     * @return array Un array de clientes con descuento.
+     */
+    public function findAllWithDiscount() {
+        $sql = "SELECT * FROM {$this->table} WHERE porcentaje_descuento > 0";
+        $stmt = $this->conn->query($sql);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
